@@ -1,0 +1,23 @@
+---
+odoo:
+  url: "https://odoo-dev15.pricepaper.com/web"
+
+accounts:
+  departments:
+    10: "70200"
+    20: "70300"
+    30: "50350"
+    40: "70100"
+    50: "50360"
+    60: "70370"
+    70: "70370"
+    80: "70370"
+  expenses:
+    payroll: "70550"
+    direct-labor: "50370"
+    health: "73000"
+    pension: "75900"
+
+direct-labor-departments:
+  - 30
+  - 50
