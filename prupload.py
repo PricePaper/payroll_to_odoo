@@ -1,17 +1,10 @@
-#!/usr/bin/env python3.9
+#!/usr/bin/env python3.10
 import csv
 import logging
 from datetime import datetime
 
 import dateutil.parser
 import yaml
-
-_server: str = ""
-_url: str = ""
-_uid: str = ""
-_passwd: str = ""
-
-_journal_id = 0
 
 logger = logging.getLogger()
 with open('config.yaml') as f:
@@ -64,7 +57,7 @@ class PayrollBillLine():
 
     @property
     def total(self) -> float:
-        return self._total
+        return round(self._total, 2)
 
     @total.setter
     def total(self, total) -> None:
@@ -75,7 +68,7 @@ class PayrollBillLine():
 
     @property
     def earnings(self) -> float:
-        return self._earnings
+        return round(self._earnings, 2)
 
     @earnings.setter
     def earnings(self, earnings) -> None:
@@ -86,7 +79,7 @@ class PayrollBillLine():
 
     @property
     def fees(self) -> float:
-        return self._fees
+        return round(self._fees, 2)
 
     @fees.setter
     def fees(self, fees) -> None:
@@ -97,7 +90,7 @@ class PayrollBillLine():
 
     @property
     def deductions(self) -> float:
-        return self._deductions
+        return round(self._deductions, 2)
 
     @deductions.setter
     def deductions(self, deductions) -> None:
@@ -108,7 +101,7 @@ class PayrollBillLine():
 
     @property
     def retirement(self) -> float:
-        return self._retirement
+        return round(self._retirement, 2)
 
     @retirement.setter
     def retirement(self, retirement) -> None:
@@ -128,18 +121,21 @@ class PayrollBillLine():
         except ValueError:
             self._department = 0
 
-    @property
-    def account_code(self) -> str:
-        if self.is_fee_only is False:
-            try:
-                return config['accounts']['departments'][self.department]
-            except KeyError:
-                logger.error(f"The department {self.department} does not exist in the config file")
-        return "not applicable"
-
-    @property
-    def fees_account_code(self) -> str:
-        if self.department in config['direct-labor-departments']:
-            return config['accounts']['expenses']['direct-labor']
-        else:
-            return config['accounts']['expenses']['payroll']
+    def get_account_code(self, property: str) -> str:
+        match property:
+            case "earnings":
+                if self.is_fee_only is False:
+                    try:
+                        return config['accounts']['departments'][self.department]
+                    except KeyError:
+                        logger.error(f"The department {self.department} does not exist in the config file")
+                return "not applicable"
+            case "fees":
+                if self.department in config['direct-labor-departments']:
+                    return config['accounts']['expenses']['direct-labor']
+                else:
+                    return config['accounts']['expenses']['payroll']
+            case "deductions":
+                return config['accounts']['expenses']['health']
+            case "retirement":
+                return config['accounts']['expenses']['pension']
