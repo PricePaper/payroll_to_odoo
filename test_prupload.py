@@ -26,7 +26,7 @@ class TestPayrollBill(TestCase):
 
 class TestPayrollBillLine(TestCase):
     def setUp(self) -> None:
-        with open('test_data.csv') as f:
+        with open('test_data.csv', newline='') as f:
             lines = DictReader(f)
 
             # slurp all lines to make life easy
@@ -64,6 +64,7 @@ class TestPayrollBillLine(TestCase):
                          "Line values do not equal line total")
         self.assertEqual(payroll_line.account_code, "70200")
         self.assertEqual(payroll_line.fees_account_code, "70550")
+        self.assertFalse(payroll_line.is_fee_only)
 
     def test_fee_only_payroll_line(self):
         """Test line with sales tax only"""
