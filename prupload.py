@@ -1,9 +1,13 @@
 #!/usr/bin/env python3.10
 import csv
 import logging
-from datetime import datetime
+import re
+import ssl
+import xmlrpc.client
+from datetime import datetime, date
 
 import dateutil.parser
+import math
 import yaml
 
 logger = logging.getLogger()
@@ -14,24 +18,107 @@ with open('config.yaml') as f:
 class PayrollBill():
     def __init__(self):
         self.id: int = 0  # Odoo obj id
-        self.bill_date: datetime = datetime.now()
+        self.date: date = date.today()
+        self.due_date: date = date.today()
         self.ref: str = ''
         self.payroll_lines: list = []
 
-    def load(self, infile) -> None:
-        pr_csv = csv.DictReader(infile)
+    @property
+    def invoice_total(self) -> float:
+        if len(self.payroll_lines) > 0:
+            return round(math.fsum([l.total for l in self.payroll_lines]), 2)
+        else:
+            return 0.0
 
-        line = next(pr_csv)
+    @classmethod
+    def _clean_file(cls, infile) -> list[str]:
+        """Remove extra spaces from the ADP file that make csv.DictReader sad"""
 
-        bd: str = line.get("Period End Date", "").strip()
-        self.bill_date: datetime = dateutil.parser.parse(bd)
+        # The file is formatted like "text text"   ,"more text"   ,
+        # and the extra white space after the quote causes problems
+        # so we find/remove all white space following a quote and before the comma
+        junk = re.compile(r'"\s+,')
+        cleanfile: list[str] = [junk.sub(r'",', line) for line in infile]
 
-        dd: str = line.get("Check Date", "").strip()
-        due_date: datetime = dateutil.parser.parse(dd)
+        return cleanfile
 
-        self.ref: str = line.get("Paygroup", "").strip() + line.get("Report Year", "").strip() + line.get("Week #",
-                                                                                                          "").strip() + \
-                        '-' + line.get("Payroll #", "").strip()
+    @classmethod
+    def load(cls, infile) -> object:
+        """:returns PayrollBill object from file with data loaded"""
+
+        infile = cls._clean_file(infile)
+        pr_csv = csv.DictReader(infile, dialect='unix', quoting=csv.QUOTE_ALL)
+
+        # slurp all lines to make life easy
+        payroll_lines: list[dict] = [x for x in pr_csv]
+        line: dict = payroll_lines[0]
+
+        # Create a new PayrollBill object
+        bill = PayrollBill()
+
+        bd: str = line.get("Period End Date", "")
+        bill.date = dateutil.parser.parse(bd).date()
+
+        dd: str = line.get("Check Date", "")
+        bill.due_date = dateutil.parser.parse(dd).date()
+
+        bill.ref = line.get("Paygroup", "") + '-20' + line.get("Report Year", "") + "-W" + \
+                   line.get("Week #", "") + '-' + line.get("Payroll #", "")
+
+        # Add payroll lines to payroll bill
+        for line in payroll_lines:
+            bill.payroll_lines.append(
+                PayrollBillLine(
+                    description=line['Dept Descr'],
+                    total=line['Total Payroll Bill'],
+                    department=line['Worked Department #'],
+                    earnings=line['Gross Earnings'],
+                    fees=line['Total Fee'],
+                    deductions=line['Deduct Adjust'],
+                    retirement=line['Employer Contrib (401k)']
+                )
+            )
+        return bill
+
+    @classmethod
+    def save_to(cls, server: str, bill: object) -> int:
+        """Creates vendor bill in Odoo.
+        :returns object id: int"""
+
+        # get login info from the config file
+        url = config[server]['url']
+        db = config[server]['database']
+        username = config[server]['username']
+        password = config[server]['password']
+
+        # get uid of user
+        with xmlrpc.client.ServerProxy(f"{url}/xmlrpc/2/common", allow_none=True,context=ssl._create_unverified_context()) as common:
+            uid = common.authenticate(db, username, password, {})
+
+        vals = {
+            'move_type': 'in_invoice',
+            'partner_id': config[server]['partner-id'],
+            'date': bill.date.isoformat(),
+            'invoice_date': bill.date.isoformat(),
+            'invoice_date_due': bill.due_date.isoformat(),
+            'ref': bill.ref,
+            'journal_id': config[server]['journal-id'],
+        }
+        with xmlrpc.client.ServerProxy(f'{url}/xmlrpc/2/object', allow_none=True,context=ssl._create_unverified_context()) as models:
+            bill.id = models.execute_kw(db, uid, password, 'account.move', 'create', [vals])
+
+        vals = []
+
+        for pr_line in bill.payroll_lines:
+            vals.append(
+                {
+                    'move_id': bill.id,
+
+
+                }
+            )
+
+        return bill.id
 
 
 class PayrollBillLine():
@@ -121,8 +208,8 @@ class PayrollBillLine():
         except ValueError:
             self._department = 0
 
-    def get_account_code(self, property: str) -> str:
-        match property:
+    def get_account_code(self, prop: str) -> str:
+        match prop:
             case "earnings":
                 if self.is_fee_only is False:
                     try:
@@ -139,3 +226,4 @@ class PayrollBillLine():
                 return config['accounts']['expenses']['health']
             case "retirement":
                 return config['accounts']['expenses']['pension']
+        return ""

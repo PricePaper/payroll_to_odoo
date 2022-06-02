@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 from csv import DictReader
-from datetime import datetime
+from datetime import datetime, date
 from unittest import TestCase
 
 from prupload import PayrollBill, PayrollBillLine
@@ -9,19 +9,31 @@ from prupload import PayrollBill, PayrollBillLine
 
 class TestPayrollBill(TestCase):
 
+    def setUp(self) -> None:
+        self.csvfile = open('test_data.csv', newline='')
+
+    def tearDown(self) -> None:
+        self.csvfile.close()
+
     def test_construction(self):
         assert PayrollBill()
+        self.assertEqual(PayrollBill().invoice_total, 0)
 
     def test_load(self):
-        with open('test_data.csv') as f:
-            test_bill = PayrollBill()
-            test_bill.load(f)
+        test_bill = PayrollBill.load(self.csvfile)
 
-            self.assertEqual(test_bill.bill_date, datetime(2022, 5, 13))
-            self.assertEqual(test_bill.ref, '1QR2220-1')
+        self.assertEqual(test_bill.date, date(2022, 5, 13))
+        self.assertEqual(test_bill.ref, '1QR-2022-W20-1')
+        self.assertEqual(len(test_bill.payroll_lines), 8)
+        self.assertEqual(test_bill.invoice_total, 28356.58)
 
-    def test__add_line(self):
-        pass
+    def test_save_to(self):
+        bill = PayrollBill.load(self.csvfile)
+
+        PayrollBill.save_to("odoo-dev", bill)
+
+        assert bill.id > 0
+        print(f"Vendor Bill id = {bill.id}")
 
 
 class TestPayrollBillLine(TestCase):

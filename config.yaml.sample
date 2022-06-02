@@ -1,0 +1,29 @@
+---
+odoo-dev:
+  url: "http://localhost:8069
+  username: "use@pricepaper.com"
+  password: "TheQuickBrownFoxJumpsOverTheLazyDog"
+  database: "superapps"
+  # Store ADP's id so we don't have to look it up
+  partner-id: 6084
+  journal-id: 2
+
+accounts:
+  departments:
+    10: "70200"
+    20: "70300"
+    30: "50350"
+    40: "70100"
+    50: "50360"
+    60: "70370"
+    70: "70370"
+    80: "70370"
+  expenses:
+    payroll: "70550"
+    direct-labor: "50370"
+    health: "73000"
+    pension: "75900"
+
+direct-labor-departments:
+  - 30
+  - 50
