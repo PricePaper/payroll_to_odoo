@@ -1,19 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 from csv import DictReader
-from datetime import datetime, date
+from datetime import date
 from unittest import TestCase
 
-from prupload import PayrollBill, PayrollBillLine
+from prupload import PayrollBill, PayrollBillLine, _clean_file
 
 
 class TestPayrollBill(TestCase):
 
     def setUp(self) -> None:
-        self.csvfile = open('test_data.csv', newline='')
-
-    def tearDown(self) -> None:
-        self.csvfile.close()
+        with open('test_data.csv', newline='') as f:
+            self.csvfile = _clean_file(f)
 
     def test_construction(self):
         assert PayrollBill()
@@ -27,10 +25,10 @@ class TestPayrollBill(TestCase):
         self.assertEqual(len(test_bill.payroll_lines), 8)
         self.assertEqual(test_bill.invoice_total, 28356.58)
 
-    def test_save_to(self):
+    def test_save(self):
         bill = PayrollBill.load(self.csvfile)
 
-        PayrollBill.save_to("odoo-dev", bill)
+        PayrollBill.save(bill)
 
         assert bill.id > 0
         print(f"Vendor Bill id = {bill.id}")
@@ -39,7 +37,7 @@ class TestPayrollBill(TestCase):
 class TestPayrollBillLine(TestCase):
     def setUp(self) -> None:
         with open('test_data.csv', newline='') as f:
-            lines = DictReader(f)
+            lines = DictReader(_clean_file(f))
 
             # slurp all lines to make life easy
             self.payroll_lines: list = [x for x in lines]
@@ -57,7 +55,7 @@ class TestPayrollBillLine(TestCase):
         return test_payroll_line
 
     def _calculate_total(self, payroll_line):
-        return round(payroll_line.earnings + payroll_line.fees + \
+        return round(payroll_line.earnings + payroll_line.fees +
                      payroll_line.deductions + payroll_line.retirement, 2)
 
     def test_construction(self):
@@ -112,3 +110,19 @@ class TestPayrollBillLine(TestCase):
         self.assertEqual(payroll_line.get_account_code("deductions"), "73000")
         self.assertEqual(payroll_line.get_account_code("retirement"), "75900")
         self.assertFalse(payroll_line.is_fee_only)
+
+    def test_to_odoo_values_regular_line(self):
+        """Test direct labor payroll line"""
+        payroll_line = self._get_new_payroll_line(self.payroll_lines[1])
+
+        entries = payroll_line.to_odoo_values(1234)
+
+        self.assertEqual(len(entries), 4)
+
+    def test_to_odoo_values_fees_line(self):
+        """Test direct labor payroll line"""
+        payroll_line = self._get_new_payroll_line(self.payroll_lines[7])
+
+        entries = payroll_line.to_odoo_values(1234)
+
+        self.assertEqual(len(entries), 1)
