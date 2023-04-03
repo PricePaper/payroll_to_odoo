@@ -329,6 +329,18 @@ class PayrollBillLine:
         return [earnings, fees, deductions, retirement]
 
 
+class XLPayrollFile:
+
+    def __init__(self, filename: str):
+        self.header_data: dict = {}
+
+        self.filename: str = filename
+
+    def read_xl_file(self) -> None:
+        with open(self.filename, 'rb') as xl_file:
+            pass
+
+
 def main():
     parser = argparse.ArgumentParser(conflict_handler='resolve',
                                      description='Import ADP payroll csv files into Odoo as vendor bills'

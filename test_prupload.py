@@ -4,7 +4,7 @@ from csv import DictReader
 from datetime import date
 from unittest import TestCase
 
-from prupload import PayrollBill, PayrollBillLine, _clean_file
+from prupload import PayrollBill, PayrollBillLine, _clean_file, XLPayrollFile
 
 
 class TestPayrollBill(TestCase):
@@ -126,3 +126,27 @@ class TestPayrollBillLine(TestCase):
         entries = payroll_line.to_odoo_values(1234)
 
         self.assertEqual(len(entries), 1)
+
+
+class TestXLPayrollFile(TestCase):
+
+    def test_constructor(self):
+        payroll_file = XLPayrollFile('new_test_data.xls')
+        self.assertIsInstance(payroll_file, XLPayrollFile)
+        self.assertEqual('new_test_data.xls', payroll_file.filename)
+
+    def setUp(self) -> None:
+        self.reader = XLPayrollFile('new_test_data.xls')
+
+    def test_read_xl_file(self):
+        self.reader.read_xl_file()
+
+        test_header_data = {
+            "paygroup": "6RZ",
+            "referenc": "NCTS-6RZ20231301",
+            "total": 13173.11,
+            "due_date": date(2023, 3, 30),
+            "end_date": date(2023, 3, 24)
+        }
+
+        self.assertDictEqual(test_header_data, self.reader.header_data)
