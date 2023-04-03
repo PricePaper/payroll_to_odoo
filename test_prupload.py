@@ -143,7 +143,7 @@ class TestXLPayrollFile(TestCase):
 
         test_header_data = {
             "paygroup": "6RZ",
-            "referenc": "NCTS-6RZ20231301",
+            "reference": "NCTS-6RZ20231301",
             "total": 13173.11,
             "due_date": date(2023, 3, 30),
             "end_date": date(2023, 3, 24)

@@ -9,6 +9,9 @@ from datetime import date
 
 import math
 
+import xlrd
+from xlrd import open_workbook, xldate_as_tuple
+
 try:
     import yaml
 except ImportError:
@@ -332,13 +335,42 @@ class PayrollBillLine:
 class XLPayrollFile:
 
     def __init__(self, filename: str):
-        self.header_data: dict = {}
+        self.header_data: dict
 
         self.filename: str = filename
 
     def read_xl_file(self) -> None:
-        with open(self.filename, 'rb') as xl_file:
-            pass
+        book: xlrd.Book
+
+        try:
+            book = open_workbook(self.filename)
+
+            # We *asume* we're always working with the first sheet
+            sheet = book.sheet_by_index(0)
+
+        except (IOError, FileNotFoundError) as e:
+            print(e)
+            print(f"There was a problem opening or reading XL file {self.filename}. Exiting.")
+            sys.exit(1)
+
+        self.header_data = self._read_payroll_header(book, sheet)
+
+    def _read_payroll_header(self, book: xlrd.Book, sheet: xlrd.sheet) -> dict:
+        results: dict
+
+        xrow = lambda x: config['xl-cell-locations']['header'][x][0]
+        ycol = lambda y: config['xl-cell-locations']['header'][y][1]
+
+        results = {
+            'paygroup': sheet.cell_value(xrow('paygroup'), ycol('paygroup')),
+            'reference': sheet.cell_value(xrow('reference'), ycol('reference')),
+            'reference': sheet.cell_value(xrow('reference'), ycol('reference')),
+            'total': sheet.cell_value(xrow('total'), ycol('total')),
+            'due_date': date(*xldate_as_tuple(sheet.cell_value(xrow('due_date'), ycol('due_date')), book.datemode)[:3]),
+            'end_date': date(*xldate_as_tuple(sheet.cell_value(xrow('end_date'), ycol('end_date')), book.datemode)[:3])
+        }
+
+        return results
 
 
 def main():
