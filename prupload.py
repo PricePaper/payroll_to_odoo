@@ -1,13 +1,12 @@
 #!/usr/bin/env python3.10
 import argparse
 import csv
+import math
 import re
 import ssl
 import sys
 import xmlrpc.client
 from datetime import date
-
-import math
 
 import xlrd
 from xlrd import open_workbook, xldate_as_tuple
@@ -79,7 +78,7 @@ def _clean_file(infile) -> list[str]:
     return [junk.sub(r'",', line) for line in infile]
 
 
-class PayrollBill():
+class PayrollBill:
     def __init__(self):
 
         self.id: int = 0  # Odoo obj id
@@ -134,7 +133,7 @@ class PayrollBill():
         return bill
 
     @classmethod
-    def save(cls, bill: object) -> int:
+    def save(cls, bill) -> int:
         """Creates vendor bill in Odoo.
         :type bill: PayrollBill
         :returns object id: int"""
@@ -335,7 +334,9 @@ class PayrollBillLine:
 class XLPayrollFile:
 
     def __init__(self, filename: str):
-        self.header_data: dict
+
+        self.header_data: dict[str: str]
+        self.pay_data: dict[int: list[dict]]
 
         self.filename: str = filename
 
@@ -343,10 +344,10 @@ class XLPayrollFile:
         book: xlrd.Book
 
         try:
-            book = open_workbook(self.filename)
+            book: xlrd.Book = open_workbook(self.filename)
 
             # We *asume* we're always working with the first sheet
-            sheet = book.sheet_by_index(0)
+            sheet: xlrd.sheet.Sheet = book.sheet_by_index(0)
 
         except (IOError, FileNotFoundError) as e:
             print(e)
@@ -354,8 +355,10 @@ class XLPayrollFile:
             sys.exit(1)
 
         self.header_data = self._read_payroll_header(book, sheet)
+        self.pay_data = self._read_pay_data(sheet)
+        print(self.pay_data)
 
-    def _read_payroll_header(self, book: xlrd.Book, sheet: xlrd.sheet) -> dict:
+    def _read_payroll_header(self, book: xlrd.Book, sheet: xlrd.sheet.Sheet) -> dict:
         results: dict
 
         xrow = lambda x: config['xl-cell-locations']['header'][x][0]
@@ -372,7 +375,29 @@ class XLPayrollFile:
 
         return results
 
+    def _read_pay_data(self, sheet: xlrd.sheet.Sheet) -> list:
 
+        start_block: int = 0
+        end_block: int = 0
+        index: int = 0
+
+        # Find the section of the file that contains the department data we need by iterating the file
+        while index < sheet.nrows:
+            match sheet.cell_value(index, 0):
+                case "DEPARTMENT NUMBER":
+                    start_block = index
+                case "Company Total":
+                    # Company Total is a common cell value. We only want the one after DEPARTMENT NUMBER
+                    if start_block:
+                        end_block = index + 1
+                        break
+            index += 1
+
+        data: list = [sheet.row_values(line) for line in range(start_block, end_block)]
+
+        # Make a list dictionary for easy access, like a CSVDict
+        data_dict: list = [dict(zip(data[0], v)) for v in data[1:]]
+        return data_dict
 def main():
     parser = argparse.ArgumentParser(conflict_handler='resolve',
                                      description='Import ADP payroll csv files into Odoo as vendor bills'

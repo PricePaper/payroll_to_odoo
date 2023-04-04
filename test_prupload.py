@@ -141,6 +141,7 @@ class TestXLPayrollFile(TestCase):
     def test_read_xl_file(self):
         self.reader.read_xl_file()
 
+        # check file header info
         test_header_data = {
             "paygroup": "6RZ",
             "reference": "NCTS-6RZ20231301",
@@ -150,3 +151,6 @@ class TestXLPayrollFile(TestCase):
         }
 
         self.assertDictEqual(test_header_data, self.reader.header_data)
+
+        # Check that payroll lines exist
+        self.assertEqual(4, len(self.reader.pay_data.keys()))
