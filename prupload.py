@@ -96,6 +96,9 @@ class PayrollBill:
 
     @classmethod
     def load(cls, infile) -> object:
+
+    @classmethod
+    def _load_csv(cls, infile) -> object:
         """:returns PayrollBill object from file with data loaded"""
 
         infile = _clean_file(infile)

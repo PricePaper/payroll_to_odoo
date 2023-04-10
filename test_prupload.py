@@ -153,4 +153,12 @@ class TestXLPayrollFile(TestCase):
         self.assertDictEqual(test_header_data, self.reader.header_data)
 
         # Check that payroll lines exist
-        self.assertEqual(4, len(self.reader.pay_data.keys()))
+        self.assertEqual(5, len(self.reader.pay_data))
+
+        # Check line values
+        pr_line = self.reader.pay_data[1]
+
+        self.assertEqual(int(pr_line['DEPARTMENT NUMBER']), 20)
+        self.assertEqual(int(pr_line['GROSS']), 4900.0)
+        self.assertEqual(pr_line['TOTAL SVC FEE AMT'], 506.12)
+
