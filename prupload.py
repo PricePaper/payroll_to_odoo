@@ -7,9 +7,22 @@ import ssl
 import sys
 import xmlrpc.client
 from datetime import date
+from typing import io
 
-import xlrd
-from xlrd import open_workbook, xldate_as_tuple
+import prupload
+
+try:
+    import xlrd
+    from xlrd import open_workbook, xldate_as_tuple
+except ImportError:
+    print("The xlrd module is not installed.", sys.error)
+    sys.exit(1)
+
+try:
+    import magic
+except ImportError:
+    print("The python-magic module is not installed.", sys.stderr)
+    sys.exit(1)
 
 try:
     import yaml
@@ -67,7 +80,7 @@ except FileNotFoundError:
 
 # END test global variables
 
-def _clean_file(infile) -> list[str]:
+def _clean_file(infile: io.TextIO) -> list[str]:
     """Remove extra spaces from the ADP file that make csv.DictReader sad"""
 
     # The file is formatted like "text text"   ,"more text"   ,
@@ -86,6 +99,24 @@ class PayrollBill:
         self.due_date: date = date.today()
         self.ref: str = ''
         self.payroll_lines: list = []
+        self.file_total: float = 0.0
+        self.source_file_type: str = ""
+
+    @property
+    def is_balanced(self) -> bool:
+        """
+        For Excel files only, test that the total in the file matches the total of the PayrollBill object.
+        Does not work for CSV payroll files as they do not have a total. For CSV, always return True
+        :return: True if they match. False if they do not. Always True on CSV files.
+        :rtype: bool
+        """
+
+        if self.source_file_type == "excel" and self.file_total == self.invoice_total:
+            return True
+        elif self.source_file_type == "csv":
+            return True
+        else:
+            return False
 
     @property
     def invoice_total(self) -> float:
@@ -95,10 +126,67 @@ class PayrollBill:
             return 0.0
 
     @classmethod
-    def load(cls, infile) -> object:
+    def load(cls, infile: io.TextIO) -> object:
+
+        try:
+            mime_type = magic.from_file(infile.name, mime=True)
+
+            if mime_type == 'application/vnd.ms-excel':
+                i: prupload.PayrollBill = cls._load_xl(infile)
+                i.source_file_type = "excel"
+                return i
+
+            elif mime_type == 'text/plain' and infile.name.endswith('.csv'):
+                i: prupload.PayrollBill = cls._load_csv(infile)
+                i.source_file_type = "csv"
+                return i
+        except:
+            print("The file is neither an Excel file nor a CSV, is not a payroll bill, or can not be read. Exiting.",
+                  sys.stderr)
+            sys.exit(1)
 
     @classmethod
-    def _load_csv(cls, infile) -> object:
+    def _load_xl(cls, infile: io.TextIO) -> object:
+
+        xl_file: XLPayrollFile = XLPayrollFile(filename=infile.name, load=True)
+
+        # Create a new PayrollBill object
+        bill = PayrollBill()
+        bill.file_total = xl_file.header_data['total']
+
+        bill.date = xl_file.header_data['end_date']
+        bill.due_date = xl_file.header_data['due_date']
+
+        bill.ref = xl_file.header_data['reference']
+
+        # Add payroll lines to payroll bill
+        for line in xl_file.pay_data:
+            # Add medical deductions. Some could be empty strings which need to be zero
+            medical: float = 0
+            medical += line['ADJ 74-AFLAC PRETAX'] or 0.0
+            medical += line['ADJ 31-MEDICAL'] or 0.0
+            medical += line['ADJ 33-TS DENTAL'] or 0.0
+            medical += line['ADJ 34-VISION'] or 0.0
+
+            # Same with fees
+            fees: float = 0
+            fees += line['TOTAL SVC FEE AMT'] or 0.0
+            fees += line['ADJ NYMT-NY METRO'] or 0.0
+            fees += line['TLM SUBTOTAL'] or 0.0
+            bill.payroll_lines.append(
+                PayrollBillLine(
+                    total=line['TOTAL'],
+                    department=int(line['DEPARTMENT NUMBER']),
+                    earnings=line['GROSS'],
+                    fees=fees,
+                    deductions=medical,
+                    retirement=line['ADJ ER401K-401K MATCH']
+                )
+            )
+        return bill
+
+    @classmethod
+    def _load_csv(cls, infile: io.TextIO) -> object:
         """:returns PayrollBill object from file with data loaded"""
 
         infile = _clean_file(infile)
@@ -141,6 +229,12 @@ class PayrollBill:
         :type bill: PayrollBill
         :returns object id: int"""
 
+        # Make sure the total from the Excel file matches totalling up the lines. This is a
+        # noop for CSV files (no total in the file)
+        if not bill.is_balanced:
+            print("Payroll lines do not match total. Exiting.", sys.stderr)
+            sys.exit(1)
+
         # Values needed to create vendor bill in Odoo
         vals = {
             'move_type': 'in_invoice',
@@ -179,10 +273,10 @@ class PayrollBill:
 
 class PayrollBillLine:
 
-    def __init__(self, description: str, total: float, department=0, earnings=0.0, fees=0.0,
+    def __init__(self, total: float, description: str = '', department=0, earnings=0.0, fees=0.0,
                  deductions=0.0, retirement=0.0):
 
-        self.description: str = description
+        self._description: str = description
         self.total: float = total
         self.department: int = department
         self.earnings: float = earnings
@@ -197,6 +291,17 @@ class PayrollBillLine:
             self.is_fee_only = True
         else:
             self.is_fee_only = False
+
+    @property
+    def description(self) -> str:
+        if not self._description and self.department:
+            self._description = config['department-descriptions'][self.department]
+
+        return self._description
+
+    @description.setter
+    def description(self, description: str) -> None:
+        self._description = description
 
     @property
     def total(self) -> float:
@@ -336,18 +441,34 @@ class PayrollBillLine:
 
 class XLPayrollFile:
 
-    def __init__(self, filename: str):
+    def __init__(self, filename: str, load=False):
+        """
+        Represents the Excel payroll file
+        :param filename: payroll file
+        :type filename: str
+        :param load: whether to load the payroll data on class instantiation
+        :type load: bool
+        """
 
         self.header_data: dict[str: str]
         self.pay_data: dict[int: list[dict]]
 
         self.filename: str = filename
 
+        if load:
+            self.read_xl_file()
+
     def read_xl_file(self) -> None:
+        """
+        This method causes the Excel payroll file to be read into the instance, stored in
+        self.header_data and self.pay_data
+        :return: None
+        :rtype: None
+        """
         book: xlrd.Book
 
         try:
-            book: xlrd.Book = open_workbook(self.filename)
+            book: xlrd.Book = xlrd.open_workbook(self.filename)
 
             # We *asume* we're always working with the first sheet
             sheet: xlrd.sheet.Sheet = book.sheet_by_index(0)
@@ -369,8 +490,7 @@ class XLPayrollFile:
 
         results = {
             'paygroup': sheet.cell_value(xrow('paygroup'), ycol('paygroup')),
-            'reference': sheet.cell_value(xrow('reference'), ycol('reference')),
-            'reference': sheet.cell_value(xrow('reference'), ycol('reference')),
+            'reference': sheet.cell_value(xrow('reference'), ycol('reference')).removeprefix('NCTS-'),
             'total': sheet.cell_value(xrow('total'), ycol('total')),
             'due_date': date(*xldate_as_tuple(sheet.cell_value(xrow('due_date'), ycol('due_date')), book.datemode)[:3]),
             'end_date': date(*xldate_as_tuple(sheet.cell_value(xrow('end_date'), ycol('end_date')), book.datemode)[:3])
@@ -392,7 +512,7 @@ class XLPayrollFile:
                 case "Company Total":
                     # Company Total is a common cell value. We only want the one after DEPARTMENT NUMBER
                     if start_block:
-                        end_block = index + 1
+                        end_block = index
                         break
             index += 1
 
@@ -401,6 +521,8 @@ class XLPayrollFile:
         # Make a list dictionary for easy access, like a CSVDict
         data_dict: list = [dict(zip(data[0], v)) for v in data[1:]]
         return data_dict
+
+
 def main():
     parser = argparse.ArgumentParser(conflict_handler='resolve',
                                      description='Import ADP payroll csv files into Odoo as vendor bills'

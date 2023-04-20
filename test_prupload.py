@@ -4,20 +4,25 @@ from csv import DictReader
 from datetime import date
 from unittest import TestCase
 
+import prupload
 from prupload import PayrollBill, PayrollBillLine, _clean_file, XLPayrollFile
 
 
 class TestPayrollBill(TestCase):
 
     def setUp(self) -> None:
-        with open('test_data.csv', newline='') as f:
-            self.csvfile = _clean_file(f)
+        self.csvfile = open('test_data.csv', newline='')
+        self.xl_file = open('new_test_data.xls')
+
+    def tearDown(self) -> None:
+        self.csvfile.close()
+        self.xl_file.close()
 
     def test_construction(self):
         assert PayrollBill()
         self.assertEqual(PayrollBill().invoice_total, 0)
 
-    def test_load(self):
+    def test_load_csv(self):
         test_bill = PayrollBill.load(self.csvfile)
 
         self.assertEqual(test_bill.date, date(2022, 5, 13))
@@ -25,8 +30,25 @@ class TestPayrollBill(TestCase):
         self.assertEqual(len(test_bill.payroll_lines), 8)
         self.assertEqual(test_bill.invoice_total, 28356.58)
 
-    def test_save(self):
+    def test_load_xl(self):
+        test_bill:prupload.PayrollBill = PayrollBill.load(self.xl_file)
+
+        self.assertEqual(test_bill.date, date(2023, 3, 24))
+        self.assertEqual(test_bill.ref, '6RZ20231301')
+        self.assertEqual(test_bill.invoice_total, 13173.11)
+        self.assertEqual(len(test_bill.payroll_lines), 4)
+        self.assertTrue(test_bill.is_balanced)
+
+    def test_save_csv(self):
         bill = PayrollBill.load(self.csvfile)
+
+        PayrollBill.save(bill)
+
+        assert bill.id > 0
+        print(f"Vendor Bill id = {bill.id}")
+
+    def test_save_xl(self):
+        bill = PayrollBill.load(self.xl_file)
 
         PayrollBill.save(bill)
 
@@ -144,7 +166,7 @@ class TestXLPayrollFile(TestCase):
         # check file header info
         test_header_data = {
             "paygroup": "6RZ",
-            "reference": "NCTS-6RZ20231301",
+            "reference": "6RZ20231301",
             "total": 13173.11,
             "due_date": date(2023, 3, 30),
             "end_date": date(2023, 3, 24)
@@ -153,7 +175,7 @@ class TestXLPayrollFile(TestCase):
         self.assertDictEqual(test_header_data, self.reader.header_data)
 
         # Check that payroll lines exist
-        self.assertEqual(5, len(self.reader.pay_data))
+        self.assertEqual(4, len(self.reader.pay_data))
 
         # Check line values
         pr_line = self.reader.pay_data[1]
