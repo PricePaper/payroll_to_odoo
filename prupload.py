@@ -15,25 +15,25 @@ try:
     import xlrd
     from xlrd import open_workbook, xldate_as_tuple
 except ImportError:
-    print("The xlrd module is not installed.", sys.error)
+    print("The xlrd module is not installed.", file=sys.stderr)
     sys.exit(1)
 
 try:
     import magic
 except ImportError:
-    print("The python-magic module is not installed.", sys.stderr)
+    print("The python-magic module is not installed.", file=sys.stderr)
     sys.exit(1)
 
 try:
     import yaml
 except ImportError:
-    print("The Py-YAML module is not installed.", sys.stderr)
+    print("The Py-YAML module is not installed.", file=sys.stderr)
     sys.exit(1)
 
 try:
     import dateutil.parser
 except ImportError:
-    print("The python-dateutil module is not installed.", sys.stderr)
+    print("The python-dateutil module is not installed.", file=sys.stderr)
     sys.exit(1)
 
 if sys.platform == "darwin":
@@ -142,7 +142,7 @@ class PayrollBill:
                 return i
         except:
             print("The file is neither an Excel file nor a CSV, is not a payroll bill, or can not be read. Exiting.",
-                  sys.stderr)
+                  file=sys.stderr)
             sys.exit(1)
 
     @classmethod
@@ -232,7 +232,7 @@ class PayrollBill:
         # Make sure the total from the Excel file matches totalling up the lines. This is a
         # noop for CSV files (no total in the file)
         if not bill.is_balanced:
-            print("Payroll lines do not match total. Exiting.", sys.stderr)
+            print("Payroll lines do not match total. Exiting.", file=sys.stderr)
             sys.exit(1)
 
         # Values needed to create vendor bill in Odoo
@@ -376,7 +376,7 @@ class PayrollBillLine:
                     try:
                         return config['accounts']['departments'][self.department]
                     except KeyError:
-                        print(f"The department {self.department} does not exist in the config file", sys.stderr)
+                        print(f"The department {self.department} does not exist in the config file", file=sys.stderr)
                         sys.exit(1)
                 return "not applicable"
             case "fees":
@@ -474,13 +474,12 @@ class XLPayrollFile:
             sheet: xlrd.sheet.Sheet = book.sheet_by_index(0)
 
         except (IOError, FileNotFoundError) as e:
-            print(e)
-            print(f"There was a problem opening or reading XL file {self.filename}. Exiting.")
+            print(e, file=sys.stderr)
+            print(f"There was a problem opening or reading XL file {self.filename}. Exiting.", file=sys.stderr)
             sys.exit(1)
 
         self.header_data = self._read_payroll_header(book, sheet)
         self.pay_data = self._read_pay_data(sheet)
-        print(self.pay_data)
 
     def _read_payroll_header(self, book: xlrd.Book, sheet: xlrd.sheet.Sheet) -> dict:
         results: dict
