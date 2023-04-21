@@ -2,11 +2,13 @@
 import argparse
 import csv
 import math
+import os
 import re
 import ssl
 import sys
 import xmlrpc.client
 from datetime import date
+from pathlib import Path
 from typing import io
 
 import prupload
@@ -126,7 +128,7 @@ class PayrollBill:
             return 0.0
 
     @classmethod
-    def load(cls, infile: io.TextIO) -> object:
+    def load(cls, infile: io.TextIO):
 
         try:
             mime_type = magic.from_file(infile.name, mime=True)
@@ -263,7 +265,7 @@ class PayrollBill:
                 {
                     'move_id': bill.id,
                     'account_id': code_ids["20100"],
-                    'credit': total,
+                    'credit': round(total,2),
                     'exclude_from_invoice_tab': True
                 }
             )
@@ -566,10 +568,9 @@ def main():
     code_ids = {rec['code']: rec['id'] for rec in codes}
 
     with open(args.input, newline='') as infile:
-        bill = PayrollBill.load(infile)
+        bill: PayrollBill = PayrollBill.load(infile)
         bill_id = PayrollBill.save(bill)
         print(f"\n{url}/web#id={bill_id}&cids=1&menu_id=240&action=1237&model=account.move&view_type=form\n")
-
         # See if we can tag the file on MacOS
         try:
             tag = macos_tags.Tag("Done", color=macos_tags.Color.GRAY)
@@ -577,6 +578,11 @@ def main():
         except ModuleNotFoundError:
             pass
 
+        # Rename clunky XL file name, if applicable
+        bill_file = Path(args.input)
+        if bill_file.suffix == ".xls":
+            new_bill_file = bill.ref + bill.date.isoformat()
+            bill_file.rename(new_bill_file)
 
 if __name__ == '__main__':
     main()

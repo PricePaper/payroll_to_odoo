@@ -13,10 +13,12 @@ class TestPayrollBill(TestCase):
     def setUp(self) -> None:
         self.csvfile = open('test_data.csv', newline='')
         self.xl_file = open('new_test_data.xls')
+        self.xl_file2 = open('new_test_data2.xls')
 
     def tearDown(self) -> None:
         self.csvfile.close()
         self.xl_file.close()
+        self.xl_file2.close()
 
     def test_construction(self):
         assert PayrollBill()
@@ -39,6 +41,15 @@ class TestPayrollBill(TestCase):
         self.assertEqual(len(test_bill.payroll_lines), 4)
         self.assertTrue(test_bill.is_balanced)
 
+    def test_load_xl2(self):
+        test_bill: prupload.PayrollBill = PayrollBill.load(self.xl_file2)
+
+        self.assertEqual(test_bill.date, date(2023, 3, 24))
+        self.assertEqual(test_bill.ref, '1QR20231301')
+        self.assertEqual(test_bill.invoice_total, 18076.51)
+        self.assertEqual(len(test_bill.payroll_lines), 5)
+        self.assertTrue(test_bill.is_balanced)
+
     def test_save_csv(self):
         bill = PayrollBill.load(self.csvfile)
 
@@ -53,7 +64,16 @@ class TestPayrollBill(TestCase):
         PayrollBill.save(bill)
 
         assert bill.id > 0
-        print(f"Vendor Bill id = {bill.id}")
+        print(f"XL Vendor Bill 1 id = {bill.id}")
+
+
+    def test_save_xl2(self):
+        bill = PayrollBill.load(self.xl_file2)
+
+        PayrollBill.save(bill)
+
+        assert bill.id > 0
+        print(f"XL Vendor Bill 2 id = {bill.id}")
 
 
 class TestPayrollBillLine(TestCase):
