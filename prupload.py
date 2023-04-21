@@ -2,7 +2,6 @@
 import argparse
 import csv
 import math
-import os
 import re
 import ssl
 import sys
@@ -165,6 +164,7 @@ class PayrollBill:
         for line in xl_file.pay_data:
             # Add medical deductions. Some could be empty strings which need to be zero
             medical: float = 0
+            medical += line['ADJ 75-AFLAC POST-TAX'] or 0.0
             medical += line['ADJ 74-AFLAC PRETAX'] or 0.0
             medical += line['ADJ 31-MEDICAL'] or 0.0
             medical += line['ADJ 33-TS DENTAL'] or 0.0
@@ -269,6 +269,21 @@ class PayrollBill:
                     'exclude_from_invoice_tab': True
                 }
             )
+            # with open(f"{bill.ref}.csv", 'w', newline='') as outfile:
+            #     fieldnames = [
+            #         'account_id',
+            #         'exclude_from_invoice_tab',
+            #         'move_id',
+            #         'name',
+            #         'price_unit',
+            #         'quantity',
+            #         'credit',
+            #     ]
+            #     writer = csv.DictWriter(outfile, fieldnames=fieldnames)
+            #
+            #     writer.writeheader()
+            #     writer.writerows(vals)
+
             models.execute_kw(db, uid, password, 'account.move.line', 'create', [vals])
         return bill.id
 
